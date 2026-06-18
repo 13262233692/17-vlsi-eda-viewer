@@ -14,6 +14,10 @@ class EdaViewerApp {
     this.layers = [];
     this.visibleLayers = new Set();
 
+    this.drcViolations = [];
+    this.drcLoaded = false;
+    this.drcVisible = true;
+
     this.lefFile = null;
     this.defFile = null;
     this.parseTaskId = null;
@@ -47,6 +51,7 @@ class EdaViewerApp {
       'diX', 'diY', 'diCursor',
       'rsFps', 'rsDraws', 'rsVerts', 'rsLayers', 'rsTiles', 'rsPending',
       'progressFill', 'progressText', 'progressBar', 'helpHint', 'viewportOverlay',
+      'btnDrc', 'drcStatus', 'drcToggle', 'drcViolationList',
     ];
     for (const id of ids) {
       this.elements[id] = document.getElementById(id);
@@ -64,6 +69,7 @@ class EdaViewerApp {
     }
 
     this.camera = new Camera();
+    this.camera.rtcEnabled = true;
     const rect = this.elements.glCanvas.getBoundingClientRect();
     this.camera.setCanvasSize(rect.width, rect.height);
 
@@ -123,6 +129,9 @@ class EdaViewerApp {
 
     this.elements.btnAllOn.addEventListener('click', () => this._setAllLayers(true));
     this.elements.btnAllOff.addEventListener('click', () => this._setAllLayers(false));
+
+    this.elements.btnDrc?.addEventListener('click', () => this._onRunDRC());
+    this.elements.drcToggle?.addEventListener('click', () => this._toggleDRC());
   }
 
   _checkParseReady() {
@@ -542,7 +551,12 @@ class EdaViewerApp {
   _combineLayerData() {
     const viewport = this.camera.getViewportWorld();
     const visibleList = this.visibleLayers.size > 0 ? Array.from(this.visibleLayers) : null;
-    const { layerVerts, layerColors } = this.tileManager.collectLayerDataFromVisible(viewport, visibleList);
+    const cameraCenter = this.camera.rtcEnabled
+      ? [this.camera.position[0], this.camera.position[1]]
+      : null;
+    const { layerVerts, layerColors } = this.tileManager.collectLayerDataFromVisible(
+      viewport, visibleList, cameraCenter
+    );
 
     for (const [lname, verts] of layerVerts) {
       const color = layerColors.get(lname);
@@ -553,6 +567,10 @@ class EdaViewerApp {
       if (!layerVerts.has(layer.name)) {
         this.renderer.clearLayer(layer.name);
       }
+    }
+
+    if (this.drcLoaded && this.drcVisible) {
+      this._refreshDRCViolations(viewport);
     }
 
     this.needRender = true;
@@ -635,6 +653,102 @@ class EdaViewerApp {
     if (this.elements.rsLayers) this.elements.rsLayers.textContent = stats.layersDrawn;
     if (this.elements.rsTiles) this.elements.rsTiles.textContent = `${tileStats.cached} (${tileStats.loaded})`;
     if (this.elements.rsPending) this.elements.rsPending.textContent = tileStats.pending + tileStats.queued;
+  }
+
+  async _onRunDRC() {
+    if (!this.isLoaded) return;
+    const btn = this.elements.btnDrc;
+    if (btn) btn.disabled = true;
+    this._setStatus('loading', 'Running DRC check...');
+
+    try {
+      const resp = await fetch('/api/drc/run', { method: 'POST' });
+      if (!resp.ok) throw new Error('DRC run failed: ' + resp.status);
+      const result = await resp.json();
+
+      this.drcViolations = result.violations || [];
+      this.drcLoaded = true;
+
+      if (this.elements.drcStatus) {
+        this.elements.drcStatus.textContent = `${result.total_violations} violations (${result.error_count} errors)`;
+      }
+
+      this._renderDRCViolationList();
+      this._refreshDRCViolations(this.camera.getViewportWorld());
+      this._setStatus('active', `DRC: ${result.total_violations} violations found`);
+    } catch (e) {
+      this._setStatus('error', 'DRC failed: ' + e.message);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  _toggleDRC() {
+    this.drcVisible = !this.drcVisible;
+    this.renderer.setDRCVisible(this.drcVisible);
+    const toggle = this.elements.drcToggle;
+    if (toggle) {
+      toggle.classList.toggle('active', this.drcVisible);
+    }
+    this.needRender = true;
+  }
+
+  _refreshDRCViolations(viewport) {
+    if (!this.drcLoaded) return;
+
+    const visible = this.drcViolations.filter(v => {
+      const [llx, lly, urx, ury] = v.bbox;
+      return !(urx < viewport.llx || llx > viewport.urx || ury < viewport.lly || lly > viewport.ury);
+    }).slice(0, 5000);
+
+    const cameraCenter = this.camera.rtcEnabled
+      ? [this.camera.position[0], this.camera.position[1]]
+      : null;
+
+    const adjusted = cameraCenter
+      ? visible.map(v => ({
+          ...v,
+          bbox: v.bbox.map((c, i) => i % 2 === 0 ? c - cameraCenter[0] : c - cameraCenter[1]),
+        }))
+      : visible;
+
+    this.renderer.setDRCViolations(adjusted);
+  }
+
+  _renderDRCViolationList() {
+    const list = this.elements.drcViolationList;
+    if (!list) return;
+    list.innerHTML = '';
+
+    const shown = this.drcViolations.slice(0, 50);
+    for (const v of shown) {
+      const div = document.createElement('div');
+      div.className = `drc-item drc-${v.severity}`;
+      const shortMsg = v.message.length > 60 ? v.message.substring(0, 60) + '...' : v.message;
+      div.innerHTML = `
+        <span class="drc-severity">${v.severity === 'error' ? '✕' : '⚠'}</span>
+        <span class="drc-layer">${v.layer}</span>
+        <span class="drc-msg" title="${v.message}">${shortMsg}</span>
+      `;
+      div.addEventListener('click', () => {
+        const [llx, lly, urx, ury] = v.bbox;
+        const cx = (llx + urx) / 2;
+        const cy = (lly + ury) / 2;
+        this.camera.position[0] = cx;
+        this.camera.position[1] = cy;
+        this.camera.scale = Math.max(this.camera.scale, 2.0);
+        this.camera._updateMatrices();
+        this._onViewportChanged(true);
+      });
+      list.appendChild(div);
+    }
+
+    if (this.drcViolations.length > 50) {
+      const more = document.createElement('div');
+      more.className = 'drc-more';
+      more.textContent = `... and ${this.drcViolations.length - 50} more`;
+      list.appendChild(more);
+    }
   }
 
   _loop() {

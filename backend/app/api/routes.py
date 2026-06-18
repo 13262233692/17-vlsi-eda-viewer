@@ -167,6 +167,53 @@ async def get_tile_raw(
     return result
 
 
+@router.post("/drc/run")
+async def run_drc() -> Dict[str, Any]:
+    db = get_db()
+    if not db.is_loaded:
+        raise HTTPException(status_code=404, detail="No design loaded")
+
+    try:
+        result = await asyncio.to_thread(db.run_drc)
+        return result.to_dict()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/drc/violations")
+async def get_drc_violations(
+    x: float = Query(..., description="Viewport left X"),
+    y: float = Query(..., description="Viewport bottom Y"),
+    w: float = Query(..., description="Viewport width"),
+    h: float = Query(..., description="Viewport height"),
+    max_results: Optional[int] = Query(5000, ge=1, le=50000),
+) -> Dict[str, Any]:
+    db = get_db()
+    if not db.is_loaded:
+        raise HTTPException(status_code=404, detail="No design loaded")
+
+    if not db.get_drc_result():
+        return {"violations": [], "total": 0, "in_viewport": 0, "needs_run": True}
+
+    return db.get_drc_violations_tile(x, y, w, h, max_results)
+
+
+@router.get("/drc/status")
+async def get_drc_status() -> Dict[str, Any]:
+    db = get_db()
+    result = db.get_drc_result()
+    if not result:
+        return {"has_result": False, "is_loaded": db.is_loaded}
+    return {
+        "has_result": True,
+        "is_loaded": db.is_loaded,
+        "total_violations": len(result.violations),
+        "error_count": result.error_count,
+        "warning_count": result.warning_count,
+        "elapsed_seconds": round(result.elapsed_seconds, 3),
+    }
+
+
 @router.post("/clear")
 async def clear_design() -> Dict[str, Any]:
     db = get_db()

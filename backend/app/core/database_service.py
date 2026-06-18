@@ -14,6 +14,7 @@ from ..core.def_models import DefData, LayoutDatabase
 from ..parsers.lef_parser import LefParser
 from ..parsers.def_parser import DefParser
 from ..spatial.spatial_index import SpatialIndexManager
+from ..drc.drc_engine import DRCEngine, DRCResult
 
 
 UPLOAD_DIR = Path(tempfile.gettempdir()) / "eda_viewer_uploads"
@@ -26,12 +27,15 @@ class DatabaseService:
     def __init__(self):
         self._db: LayoutDatabase = LayoutDatabase()
         self._spatial_index: Optional[SpatialIndexManager] = None
+        self._lef_data: Optional[LefData] = None
+        self._def_data: Optional[DefData] = None
         self._lef_path: Optional[str] = None
         self._def_path: Optional[str] = None
         self._parse_progress: dict = {}
         self._parse_task_id: Optional[str] = None
         self._parse_lock = asyncio.Lock()
         self._session_id: str = uuid.uuid4().hex
+        self._drc_result: Optional[DRCResult] = None
 
     @classmethod
     def get_instance(cls) -> "DatabaseService":
@@ -132,6 +136,8 @@ class DatabaseService:
                 self._spatial_index = spatial_idx
                 self._db.lef_data = lef_data
                 self._db.def_data = def_data
+                self._lef_data = lef_data
+                self._def_data = def_data
                 self._db.is_loaded = True
                 self._db.chip_bbox = spatial_idx.chip_bbox
                 stats = spatial_idx.stats
@@ -264,11 +270,59 @@ class DatabaseService:
             "viewport": {"x": x, "y": y, "w": w, "h": h},
         }
 
+    def run_drc(self) -> DRCResult:
+        if not self.is_loaded or not self._lef_data or not self._def_data:
+            raise ValueError("No design loaded")
+
+        engine = DRCEngine()
+        self._drc_result = engine.run(self._lef_data, self._def_data)
+        return self._drc_result
+
+    def get_drc_result(self) -> Optional[DRCResult]:
+        return self._drc_result
+
+    def get_drc_violations_tile(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        max_results: int = 5000,
+    ) -> dict:
+        if not self._drc_result:
+            return {"violations": [], "total": 0}
+
+        rect = Rect(llx=x, lly=y, urx=x + w, ury=y + h)
+        result_violations = []
+
+        for v in self._drc_result.violations:
+            if v.bbox.intersects(rect):
+                result_violations.append({
+                    "rule_type": v.rule_type,
+                    "layer": v.layer,
+                    "bbox": [v.bbox.llx, v.bbox.lly, v.bbox.urx, v.bbox.ury],
+                    "severity": v.severity,
+                    "message": v.message,
+                    "net1": v.net1,
+                    "net2": v.net2,
+                    "actual_distance": round(v.actual_distance, 6),
+                    "required_distance": round(v.required_distance, 6),
+                })
+                if len(result_violations) >= max_results:
+                    break
+
+        return {
+            "violations": result_violations,
+            "total": len(self._drc_result.violations),
+            "in_viewport": len(result_violations),
+        }
+
     def clear(self) -> None:
         self._db = LayoutDatabase()
         self._spatial_index = None
         self._lef_path = None
         self._def_path = None
+        self._drc_result = None
         try:
             shutil.rmtree(self.get_upload_dir(), ignore_errors=True)
         except Exception:
