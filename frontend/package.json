@@ -1,0 +1,17 @@
+{
+  "name": "vlsi-eda-viewer-frontend",
+  "version": "0.1.0",
+  "description": "VLSI EDA Layout Viewer - WebGL based chip layout visualization",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "gl-matrix": "^3.4.3"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

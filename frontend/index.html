@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VLSI EDA Layout Viewer</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="toolbar">
+      <div class="logo">
+        <span class="logo-icon">⬛</span>
+        <span class="logo-text">VLSI EDA Viewer</span>
+      </div>
+
+      <div class="toolbar-center">
+        <div id="status-bar" class="status-bar">
+          <span class="status-indicator" id="statusIndicator"></span>
+          <span id="statusText">Ready</span>
+        </div>
+      </div>
+
+      <div class="toolbar-right">
+        <div class="file-upload">
+          <label class="btn btn-secondary">
+            <input type="file" id="lefFile" accept=".lef" hidden />
+            Upload LEF
+          </label>
+          <label class="btn btn-secondary">
+            <input type="file" id="defFile" accept=".def" hidden />
+            Upload DEF
+          </label>
+          <button class="btn btn-primary" id="btnParse" disabled>Parse &amp; View</button>
+        </div>
+        <button class="btn btn-demo" id="btnDemo">Load Demo</button>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <aside class="sidebar">
+        <div class="panel">
+          <h3>Design Info</h3>
+          <div id="designInfo" class="info-block">
+            <div class="info-row"><span class="info-label">Status:</span><span id="diStatus">Not loaded</span></div>
+            <div class="info-row"><span class="info-label">Design:</span><span id="diDesign">-</span></div>
+            <div class="info-row"><span class="info-label">Instances:</span><span id="diInstances">-</span></div>
+            <div class="info-row"><span class="info-label">Pins:</span><span id="diPins">-</span></div>
+            <div class="info-row"><span class="info-label">Nets:</span><span id="diNets">-</span></div>
+            <div class="info-row"><span class="info-label">Wires:</span><span id="diWires">-</span></div>
+            <div class="info-row"><span class="info-label">Die (X):</span><span id="diX">-</span></div>
+            <div class="info-row"><span class="info-label">Die (Y):</span><span id="diY">-</span></div>
+            <div class="info-row"><span class="info-label">Cursor:</span><span id="diCursor">-</span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>View Controls</h3>
+          <div class="view-controls">
+            <button class="btn-tiny" id="btnFit">Fit to View</button>
+            <button class="btn-tiny" id="btnReset">Reset</button>
+            <div class="zoom-controls">
+              <button class="btn-tiny" id="btnZoomOut">-</button>
+              <div class="zoom-level" id="zoomLevel">100%</div>
+              <button class="btn-tiny" id="btnZoomIn">+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel layers-panel">
+          <div class="panel-header">
+            <h3>Layers</h3>
+            <div class="layer-actions">
+              <button class="btn-micro" id="btnAllOn">All</button>
+              <button class="btn-micro" id="btnAllOff">None</button>
+            </div>
+          </div>
+          <div id="layerList" class="layer-list">
+            <div class="empty-hint">No layers loaded</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Render Stats</h3>
+          <div id="renderStats" class="info-block">
+            <div class="info-row"><span class="info-label">FPS:</span><span id="rsFps">-</span></div>
+            <div class="info-row"><span class="info-label">Draw Calls:</span><span id="rsDraws">-</span></div>
+            <div class="info-row"><span class="info-label">Vertices:</span><span id="rsVerts">-</span></div>
+            <div class="info-row"><span class="info-label">Layers Drawn:</span><span id="rsLayers">-</span></div>
+            <div class="info-row"><span class="info-label">Tiles Cached:</span><span id="rsTiles">-</span></div>
+            <div class="info-row"><span class="info-label">Pending Req:</span><span id="rsPending">-</span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Parse Progress</h3>
+          <div class="progress-container">
+            <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+            <div class="progress-text" id="progressText">Idle</div>
+          </div>
+        </div>
+      </aside>
+
+      <section class="canvas-container">
+        <canvas id="glCanvas"></canvas>
+        <div class="viewport-overlay" id="viewportOverlay"></div>
+        <div class="mini-map" id="miniMap">
+          <canvas id="miniMapCanvas"></canvas>
+          <div class="mini-map-viewport" id="miniMapViewport"></div>
+        </div>
+        <div class="help-hint" id="helpHint">
+          <div><strong>Drag</strong> to pan &nbsp;|&nbsp; <strong>Scroll</strong> to zoom &nbsp;|&nbsp; <strong>Double-click</strong> to zoom in</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
