@@ -175,10 +175,13 @@ export class TileManager {
     }
   }
 
-  collectLayerDataFromVisible(viewport, visibleLayers = null) {
+  collectLayerDataFromVisible(viewport, visibleLayers = null, cameraCenter = null) {
     const layerVerts = new Map();
     const layerCounts = new Map();
     const layerColors = new Map();
+    const useRtc = cameraCenter !== null;
+    const cx = useRtc ? cameraCenter[0] : 0;
+    const cy = useRtc ? cameraCenter[1] : 0;
 
     for (const [key, cached] of this.cache) {
       const { tile, data } = cached;
@@ -204,7 +207,15 @@ export class TileManager {
         }
 
         if (layer.vertices && layer.vertices.length) {
-          verts.push(...layer.vertices);
+          const srcVerts = layer.vertices;
+          const len = srcVerts.length;
+          if (useRtc) {
+            for (let i = 0; i < len; i += 2) {
+              verts.push(srcVerts[i] - cx, srcVerts[i + 1] - cy);
+            }
+          } else {
+            verts.push(...srcVerts);
+          }
         }
         layerCounts.set(lname, (layerCounts.get(lname) || 0) + (layer.count || 0));
       }

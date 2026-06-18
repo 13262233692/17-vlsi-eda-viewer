@@ -13,6 +13,7 @@ export class Camera {
     this.dpr = window.devicePixelRatio || 1;
     this.minScale = 0.001;
     this.maxScale = 100000;
+    this.rtcEnabled = false;
   }
 
   setCanvasSize(w, h) {
@@ -63,7 +64,9 @@ export class Camera {
 
     mat4.identity(this.viewMatrix);
     mat4.scale(this.viewMatrix, this.viewMatrix, [this.scale, this.scale, 1]);
-    mat4.translate(this.viewMatrix, this.viewMatrix, [-this.position[0], -this.position[1], 0]);
+    if (!this.rtcEnabled) {
+      mat4.translate(this.viewMatrix, this.viewMatrix, [-this.position[0], -this.position[1], 0]);
+    }
 
     mat4.invert(this.invViewMatrix, this.viewMatrix);
   }
